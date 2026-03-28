@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../features/placeholder/placeholder_page.dart';
+import '../../features/gps_simulator/gps_simulator_page.dart';
 
 class FeatureItem {
   const FeatureItem({
@@ -42,6 +43,17 @@ class FeatureRegistry {
           title: 'Ping 測試',
           icon: Icons.network_ping,
           page: const PlaceholderPage(title: 'Ping 測試'),
+        ),
+      ],
+    ),
+    FeatureCategory(
+      title: '位置工具',
+      icon: Icons.location_on,
+      items: [
+        FeatureItem(
+          title: 'GPS 路線模擬器',
+          icon: Icons.route,
+          page: const GpsSimulatorPage(),
         ),
       ],
     ),
