@@ -71,7 +71,7 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
           });
         case 'completed':
           setState(() {
-            _state = const SimulationState(status: SimulationStatus.ready);
+            _state = _state.copyWith(status: SimulationStatus.ready, currentIndex: 0, totalPoints: 0);
           });
           if (mounted) {
             ScaffoldMessenger.of(context)
@@ -105,7 +105,7 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
     final center = _mapController.camera.center;
     setState(() {
       _marks.add(center);
-      _state = const SimulationState(status: SimulationStatus.ready);
+      _state = _state.copyWith(status: SimulationStatus.ready);
     });
   }
 
@@ -140,7 +140,7 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
     final target = _marks.last;
     await _channel.teleport(target);
     setState(() {
-      _state = SimulationState(status: SimulationStatus.teleporting);
+      _state = _state.copyWith(status: SimulationStatus.teleporting);
       _currentPosition = target;
     });
   }
@@ -163,7 +163,7 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
   Future<void> _onStop() async {
     await _channel.stop();
     setState(() {
-      _state = const SimulationState(status: SimulationStatus.ready);
+      _state = _state.copyWith(status: SimulationStatus.ready, currentIndex: 0, totalPoints: 0);
       _interpolatedPoints.clear();
     });
   }
