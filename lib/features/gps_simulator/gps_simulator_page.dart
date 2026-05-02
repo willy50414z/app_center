@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'models/simulation_state.dart';
 import 'services/gps_mock_channel.dart';
-import 'services/osrm_service.dart';
 import 'services/route_interpolator.dart';
 import 'widgets/playback_controls.dart';
-import 'widgets/route_status_bar.dart';
 import 'widgets/setup_guide_card.dart';
 import 'widgets/simulator_map.dart';
 
@@ -24,12 +23,10 @@ class GpsSimulatorPage extends StatefulWidget {
 
 class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
   final _mapController = MapController();
-  final _osrm = OsrmService();
   final _channel = GpsMockChannel();
 
   SimulationState _state = const SimulationState();
-  LatLng? _origin;
-  LatLng? _destination;
+  List<LatLng> _marks = [];
   List<LatLng> _interpolatedPoints = [];
   LatLng? _currentPosition;
 
@@ -75,7 +72,6 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
         case 'completed':
           setState(() {
             _state = const SimulationState(status: SimulationStatus.ready);
-            _currentPosition = _origin;
           });
           if (mounted) {
             ScaffoldMessenger.of(context)
@@ -105,143 +101,72 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
     );
   }
 
-  // ── 長按地圖 ──────────────────────────────────────────────
-
-  void _onMapLongPress(LatLng point) {
-    if (_origin == null) {
-      _setOrigin(point);
-    } else if (_destination == null) {
-      _setDestination(point);
-    } else {
-      _showPointSelectionSheet(point);
-    }
+  void _onMark() {
+    final center = _mapController.camera.center;
+    setState(() {
+      _marks.add(center);
+      _state = const SimulationState(status: SimulationStatus.ready);
+    });
   }
 
-  void _setOrigin(LatLng point) {
+  void _onClearAll() {
     setState(() {
-      _origin = point;
-      _destination = null;
-      _interpolatedPoints = [];
+      _marks.clear();
+      _interpolatedPoints.clear();
       _state = const SimulationState();
       _currentPosition = null;
     });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('起點已設定'), duration: Duration(seconds: 1)));
   }
 
-  void _setDestination(LatLng point) {
-    setState(() => _destination = point);
-    _fetchRoute();
+  void _onSpeedChanged(int speedKmh) {
+    setState(() {
+      _state = _state.copyWith(walkingSpeedKmh: speedKmh);
+    });
   }
 
-  void _showPointSelectionSheet(LatLng point) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.location_on, color: Colors.green),
-              title: const Text('設為新起點'),
-              onTap: () {
-                Navigator.pop(context);
-                _setOrigin(point);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.location_on, color: Colors.red),
-              title: const Text('設為新終點'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _destination = point);
-                _fetchRoute();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── 路線計算 ──────────────────────────────────────────────
-
-  Future<void> _fetchRoute() async {
-    final origin = _origin;
-    final destination = _destination;
-    if (origin == null || destination == null) return;
-
-    setState(() => _state = _state.copyWith(status: SimulationStatus.routing));
-
-    try {
-      final result = await _osrm.fetchRoute(origin, destination);
-      final dense = RouteInterpolator.interpolate(result.points);
-
-      setState(() {
-        _interpolatedPoints = dense;
-        _currentPosition = origin;
-        _state = SimulationState(
-          status: SimulationStatus.ready,
-          totalPoints: dense.length,
-          routeDistanceKm: result.distanceMeters / 1000,
-          routeDurationSec: result.durationSeconds,
-        );
-      });
-
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(result.points),
-          padding: const EdgeInsets.all(40),
-        ),
-      );
-    } on OsrmException catch (e) {
-      setState(() => _state = _state.copyWith(
-            status: SimulationStatus.idle,
-            errorMessage: e.message,
-          ));
+  Future<void> _onTeleport() async {
+    if (_marks.isEmpty) return;
+    
+    final status = await Permission.locationWhenInUse.request();
+    if (!status.isGranted) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('需要位置權限才能使用傳送功能')),
+        );
       }
+      return;
     }
+    
+    final target = _marks.last;
+    await _channel.teleport(target);
+    setState(() {
+      _state = SimulationState(status: SimulationStatus.teleporting);
+      _currentPosition = target;
+    });
   }
 
-  // ── 播放控制 ──────────────────────────────────────────────
-
-  Future<void> _onPlay() async {
-    final intervalMs = GpsMockChannel.computeIntervalMs(
-      totalPoints: _interpolatedPoints.length,
-      durationSeconds: _state.routeDurationSec ?? 0,
-      speedMultiplier: _state.speedMultiplier,
-    );
-    await _channel.start(points: _interpolatedPoints, intervalMs: intervalMs);
-    setState(() => _state = _state.copyWith(status: SimulationStatus.playing));
-  }
-
-  Future<void> _onPause() async {
-    await _channel.pause();
-    setState(() => _state = _state.copyWith(status: SimulationStatus.paused));
+  Future<void> _onWalk() async {
+    if (_marks.length < 2) return;
+    final path = RouteInterpolator.generateWalkingPath(_marks);
+    if (path.isEmpty) return;
+    final intervalMs = RouteInterpolator.computeWalkingIntervalMs(_state.walkingSpeedKmh);
+    await _channel.start(points: path, intervalMs: intervalMs);
+    setState(() {
+      _interpolatedPoints = path;
+      _state = SimulationState(
+        status: SimulationStatus.playing,
+        totalPoints: path.length,
+      );
+    });
   }
 
   Future<void> _onStop() async {
     await _channel.stop();
     setState(() {
-      _state = SimulationState(
-        status: SimulationStatus.ready,
-        totalPoints: _interpolatedPoints.length,
-        routeDistanceKm: _state.routeDistanceKm,
-        routeDurationSec: _state.routeDurationSec,
-        speedMultiplier: _state.speedMultiplier,
-      );
-      _currentPosition = _origin;
+      _state = const SimulationState(status: SimulationStatus.ready);
+      _interpolatedPoints.clear();
     });
   }
-
-  void _onSpeedChanged(int multiplier) {
-    setState(() => _state = _state.copyWith(speedMultiplier: multiplier));
-  }
-
-  // ── Build ──────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -251,19 +176,18 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
         Expanded(
           child: SimulatorMap(
             mapController: _mapController,
-            origin: _origin,
-            destination: _destination,
-            routePoints: _interpolatedPoints.isNotEmpty ? _interpolatedPoints : null,
+            waypoints: _marks,
             currentPosition: _currentPosition,
-            isPlaying: _state.status == SimulationStatus.playing,
-            onLongPress: _onMapLongPress,
+            isPlaying: _state.isMoving,
           ),
         ),
-        RouteStatusBar(state: _state),
         PlaybackControls(
+          marks: _marks,
           state: _state,
-          onPlay: _onPlay,
-          onPause: _onPause,
+          onMark: _onMark,
+          onClearAll: _onClearAll,
+          onTeleport: _onTeleport,
+          onWalk: _onWalk,
           onStop: _onStop,
           onSpeedChanged: _onSpeedChanged,
         ),
