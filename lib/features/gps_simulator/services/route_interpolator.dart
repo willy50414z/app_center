@@ -70,16 +70,16 @@ class RouteInterpolator {
 
       const segmentSpacingMeters = 25.0;
       final numSegments = (dist / segmentSpacingMeters).ceil() + 1;
-      final random = Random();
-      final seed = random.nextInt(10000);
+      const fixedSeed = 42;
+      final random = Random(fixedSeed);
 
       for (var s = 0; s < numSegments; s++) {
         final t = s / (numSegments - 1);
         final baseLat = a.latitude + dLat * t;
         final baseLng = a.longitude + dLon * t;
 
-        final offsetMeters = (seed + s * 7) % 10000 / 1000.0 - 5.0;
-        final clampedOffset = offsetMeters.clamp(-8.0, 8.0);
+        final offsetMeters = (fixedSeed + s * 7) % 10000 / 1000.0 - 5.0;
+        final clampedOffset = offsetMeters.clamp(-2.0, 2.0);
         final offsetLat = perpLat * clampedOffset / _earthRadiusMeters * 180 / pi;
         final offsetLng = perpLon * clampedOffset / _earthRadiusMeters * 180 / pi;
 
@@ -88,12 +88,12 @@ class RouteInterpolator {
     }
 
     controlPoints.add(waypoints.last);
-    return interpolate(controlPoints, maxSegmentMeters: 5);
+    return interpolate(controlPoints, maxSegmentMeters: 1.5);
   }
 
   static int computeWalkingIntervalMs(int speedKmh) {
     assert(speedKmh > 0, 'speedKmh must be positive');
     final speedMs = speedKmh / 3.6;
-    return (5.0 / speedMs * 1000).round();
+    return (1.5 / speedMs * 1000).round();
   }
 }

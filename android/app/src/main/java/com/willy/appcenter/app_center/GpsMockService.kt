@@ -40,6 +40,8 @@ class GpsMockService : Service() {
     private var teleportMode = false
     private var teleportLat = 0.0
     private var teleportLng = 0.0
+    private var prevLat: Double? = null
+    private var prevLng: Double? = null
 
     private val runnable = object : Runnable {
         override fun run() {
@@ -79,6 +81,8 @@ class GpsMockService : Service() {
         currentIndex = 0
         isPaused = false
         teleportMode = mode == MODE_TELEPORT
+        prevLat = null
+        prevLng = null
 
         if (teleportMode) {
             teleportLat = latArray.firstOrNull() ?: return START_NOT_STICKY
@@ -144,10 +148,23 @@ class GpsMockService : Service() {
             latitude = lat
             longitude = lng
             altitude = 0.0
-            accuracy = 1.0f
+            accuracy = 8.0f
             time = System.currentTimeMillis()
             elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+
+            prevLat?.let { prev ->
+                val prevLocation = Location("").apply {
+                    latitude = prev
+                    longitude = prevLng ?: lng
+                }
+                bearing = prevLocation.bearingTo(this)
+                val dist = prevLocation.distanceTo(this)
+                val speed = if (intervalMs > 0) dist / intervalMs * 1000 else 0f
+                this.speed = speed
+            }
         }
+        prevLat = lat
+        prevLng = lng
         try {
             lm.setTestProviderLocation(LocationManager.GPS_PROVIDER, location)
         } catch (_: Exception) {}
