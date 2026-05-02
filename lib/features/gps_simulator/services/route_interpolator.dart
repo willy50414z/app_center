@@ -48,8 +48,6 @@ class RouteInterpolator {
     return 2 * _earthRadiusMeters * asin(sqrt(h));
   }
 
-  static const _walkingSpeedMs = 1.4;
-
   static List<LatLng> generateWalkingPath(List<LatLng> waypoints) {
     if (waypoints.length < 2) return [];
 
@@ -94,6 +92,7 @@ class RouteInterpolator {
   }
 
   static int computeWalkingIntervalMs(int speedKmh) {
+    assert(speedKmh > 0, 'speedKmh must be positive');
     final speedMs = speedKmh / 3.6;
     return (5.0 / speedMs * 1000).round();
   }

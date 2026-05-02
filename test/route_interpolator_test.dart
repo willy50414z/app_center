@@ -19,5 +19,11 @@ void main() {
       final result = RouteInterpolator.computeWalkingIntervalMs(1);
       expect(result, closeTo(18000, 100));
     });
+
+    test('20 km/h gives ~900 ms for 5m segment', () {
+      // 20 km/h = 5.5555 m/s, 5m / 5.5555 * 1000 = 900ms
+      final result = RouteInterpolator.computeWalkingIntervalMs(20);
+      expect(result, closeTo(900, 20));
+    });
   });
 }
