@@ -153,7 +153,7 @@ class _GpsSimulatorPageState extends State<GpsSimulatorPage> {
     await _channel.start(points: path, intervalMs: intervalMs);
     setState(() {
       _interpolatedPoints = path;
-      _state = SimulationState(
+      _state = _state.copyWith(
         status: SimulationStatus.playing,
         totalPoints: path.length,
       );
