@@ -23,6 +23,9 @@ class GpsMockService : Service() {
         const val EXTRA_LATITUDES = "latitudes"
         const val EXTRA_LONGITUDES = "longitudes"
         const val EXTRA_INTERVAL_MS = "interval_ms"
+        const val EXTRA_MODE = "mode"
+        const val MODE_WALK = "walk"
+        const val MODE_TELEPORT = "teleport"
 
         var eventSink: EventChannel.EventSink? = null
         var instance: GpsMockService? = null
@@ -34,10 +37,18 @@ class GpsMockService : Service() {
     private var currentIndex = 0
     private var intervalMs = 500L
     private var isPaused = false
+    private var teleportMode = false
+    private var teleportLat = 0.0
+    private var teleportLng = 0.0
 
     private val runnable = object : Runnable {
         override fun run() {
             if (isPaused) return
+            if (teleportMode) {
+                injectLocation(teleportLat, teleportLng)
+                handler?.postDelayed(this, 1000L)
+                return
+            }
             if (currentIndex >= points.size) {
                 sendEvent(mapOf("type" to "completed"))
                 stopSelf()
@@ -63,10 +74,19 @@ class GpsMockService : Service() {
         val latArray = intent?.getDoubleArrayExtra(EXTRA_LATITUDES) ?: return START_NOT_STICKY
         val lngArray = intent.getDoubleArrayExtra(EXTRA_LONGITUDES) ?: return START_NOT_STICKY
         intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 500L)
+        val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_WALK
 
-        points = latArray.zip(lngArray.toList())
         currentIndex = 0
         isPaused = false
+        teleportMode = mode == MODE_TELEPORT
+
+        if (teleportMode) {
+            teleportLat = latArray.firstOrNull() ?: return START_NOT_STICKY
+            teleportLng = lngArray.firstOrNull() ?: return START_NOT_STICKY
+            points = listOf(Pair(teleportLat, teleportLng))
+        } else {
+            points = latArray.zip(lngArray.toList())
+        }
 
         try {
             setupTestProvider()

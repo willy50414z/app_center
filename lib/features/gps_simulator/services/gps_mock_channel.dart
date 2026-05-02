@@ -65,4 +65,11 @@ class GpsMockChannel {
   Future<void> stop() async {
     await _method.invokeMethod('stop');
   }
+
+  Future<void> teleport(LatLng point) async {
+    await _method.invokeMethod('teleport', {
+      'lat': point.latitude,
+      'lng': point.longitude,
+    });
+  }
 }

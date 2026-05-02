@@ -60,6 +60,28 @@ class MainActivity : FlutterActivity() {
                             ?: stopService(Intent(this, GpsMockService::class.java))
                         result.success(null)
                     }
+                    "teleport" -> {
+                        val lat = call.argument<Double>("lat") ?: run {
+                            result.error("INVALID_ARGUMENT", "lat is required", null)
+                            return@setMethodCallHandler
+                        }
+                        val lng = call.argument<Double>("lng") ?: run {
+                            result.error("INVALID_ARGUMENT", "lng is required", null)
+                            return@setMethodCallHandler
+                        }
+
+                        val intent = Intent(this, GpsMockService::class.java).apply {
+                            putExtra(GpsMockService.EXTRA_LATITUDES, doubleArrayOf(lat))
+                            putExtra(GpsMockService.EXTRA_LONGITUDES, doubleArrayOf(lng))
+                            putExtra(GpsMockService.EXTRA_MODE, GpsMockService.MODE_TELEPORT)
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
